@@ -1,0 +1,12 @@
+{
+  "name": "gateway-restaurant",
+  "version": "1.0.0",
+  "description": "Gateway Restaurant: food ordering website and backend for Abeokuta",
+  "main": "server.js",
+  "private": true,
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed.js"
+  }
+}
