@@ -1,6 +1,14 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Gateway Restaurant</title>
+<meta name="theme-color" content="#EE6C1F">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gateway">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=DM+Sans:wght@400;500;700&display=swap">
@@ -221,12 +229,13 @@ let ordersTimer=null,trackTimer=null;
 
 const byId=id=>RESTAURANTS.find(r=>r.id===id);
 const menuOf=rid=>byId(rid)?.menu||[];
+const feeFor=(r,z)=>Number.isInteger(r?.fees?.[z])?r.fees[z]:(CFG.zones[z]||0);
 const shopOf=rid=>{const r=byId(rid);return{open:r?r.open:false,...(r?r.bank:{})}};
 const saveCart=()=>lsSet("gw-cart",S.cart);
 const lines=()=>{if(!S.cart.rid)return[];const m=menuOf(S.cart.rid);return Object.entries(S.cart.q).filter(([,q])=>q>0).map(([id,q])=>{const it=m.find(x=>x.id===id);return it?{id,q,name:it.name,price:it.price,avail:it.avail!==false}:null}).filter(Boolean)};
 const count=()=>lines().reduce((s,l)=>s+l.q,0);
 const subtotal=()=>lines().reduce((s,l)=>s+l.price*l.q,0);
-function fees(){const n=count(),pk=S.co.mode==="pickup";const delivery=pk?0:(CFG.zones[S.co.zone]||0),pack=CFG.packPerItem*n,service=n?CFG.service:0,food=subtotal();return{food,delivery,pack,service,total:food+delivery+pack+service}}
+function fees(){const n=count(),pk=S.co.mode==="pickup";const delivery=pk?0:feeFor(byId(S.cart.rid),S.co.zone),pack=CFG.packPerItem*n,service=n?CFG.service:0,food=subtotal();return{food,delivery,pack,service,total:food+delivery+pack+service}}
 
 /* ===== icons ===== */
 const IC={
@@ -253,7 +262,7 @@ function rcard(r){
   const sh=shopOf(r.id),prices=menuOf(r.id).map(i=>i.price),from=prices.length?Math.min(...prices):0;
   return `<button class="rcard ${sh.open?"":"closed"}" data-act="menu" data-id="${r.id}"><div class="ban" style="background:linear-gradient(135deg,${r.c1},${r.c2})"><span>${esc(r.name)}</span><em class="rate num">★ ${r.rating.toFixed(1)}</em></div>
    <div class="bd"><div class="meta"><span>${esc(r.tags.join(" · "))}</span><span class="num">${r.time} min</span></div>
-   <div class="meta"><span>${esc(r.area)}, Abeokuta</span><span class="num">Delivery from ${naira(Math.min(...Object.values(CFG.zones)))}</span></div>
+   <div class="meta"><span>${esc(r.area)}, Abeokuta</span><span class="num">Delivery from ${naira(Math.min(...Object.keys(CFG.zones).map(z=>feeFor(r,z))))}</span></div>
    <div class="row"><span class="pill ${sh.open?"open":"closed"}">${sh.open?"Open":"Closed"}</span><span class="muted num">${from?"Items from "+naira(from):""}</span></div></div></button>`;
 }
 function vHome(){
@@ -320,7 +329,7 @@ function vCheckout(){
     <div class="f"><label for="nm">Your name</label><input id="nm" type="text" data-f="name" autocomplete="name" placeholder="e.g. John Ade" value="${esc(c.name)}"></div>
     <div class="f"><label for="ph">Phone number</label><input id="ph" type="tel" inputmode="tel" data-f="phone" autocomplete="tel" placeholder="080XXXXXXXX" value="${esc(c.phone)}"></div>
     <fieldset><legend>Order option</legend><div class="opts"><label><input type="radio" name="mode" value="delivery" ${c.mode==="delivery"?"checked":""}>Delivery</label><label><input type="radio" name="mode" value="pickup" ${c.mode==="pickup"?"checked":""}>Pickup</label></div></fieldset>
-    ${c.mode==="delivery"?`<div class="f"><label for="zone">Your area</label><select id="zone" data-f="zone">${Object.entries(CFG.zones).map(([z,fe])=>`<option value="${esc(z)}" ${c.zone===z?"selected":""}>${esc(z)} (${naira(fe)})</option>`).join("")}</select></div>
+    ${c.mode==="delivery"?`<div class="f"><label for="zone">Your area</label><select id="zone" data-f="zone">${Object.keys(CFG.zones).map(z=>`<option value="${esc(z)}" ${c.zone===z?"selected":""}>${esc(z)} (${naira(feeFor(r,z))})</option>`).join("")}</select></div>
      <div class="f"><label for="addr">House address or landmark</label><textarea id="addr" rows="2" data-f="addr" placeholder="e.g. No 5, Adeoye St, near Kuto Market">${esc(c.addr)}</textarea></div>`:""}
     <div class="f"><label for="note">Order note (optional)</label><textarea id="note" rows="2" data-f="note" placeholder="e.g. less pepper">${esc(c.note)}</textarea></div></div>
    ${c.pay==="transfer"&&sh.acctNo?`<div><p class="stephead">Step 3 · Upload receipt</p><label class="upload" for="rc">${c.receipt?`Receipt added. Tap to change.<img src="${c.receipt}" alt="Payment receipt preview">`:"📷 Tap to upload a screenshot of your transfer"}</label><input id="rc" type="file" accept="image/*" hidden></div>`:""}
@@ -570,5 +579,13 @@ async function boot(){
 }
 boot();
 setInterval(()=>{if(document.hidden||!D.loaded)return;load().then(liveRender).catch(()=>{})},30000);
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
 </script>
 </body></html>

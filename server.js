@@ -9,7 +9,7 @@ const { DatabaseSync } = require('node:sqlite');
 const PORT = Number(process.env.PORT) || 3000;
 const DATA = process.env.DATA_DIR || path.join(__dirname, 'data');
 const ADMIN_KEY = process.env.ADMIN_KEY || '';
-const PUBLIC = __dirname;
+const PUBLIC = path.join(__dirname, 'public');
 fs.mkdirSync(path.join(DATA, 'receipts'), { recursive: true });
 
 /* ---------- database ---------- */
@@ -33,6 +33,7 @@ CREATE INDEX IF NOT EXISTS orders_rid ON orders(rid, created);
 CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY, rid TEXT NOT NULL, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT NOT NULL);
 `);
+try { db.exec("ALTER TABLE restaurants ADD COLUMN fees TEXT NOT NULL DEFAULT '{}'"); } catch (e) { /* column already exists */ }
 const DEFAULT_CONFIG = {
   zones: { 'Kuto': 500, 'Oke-Ilewo': 500, 'Panseke': 500, 'Idi-Aba': 500, 'Isale-Igbein': 600, 'Lafenwa': 700, 'Ibara': 700, 'Adatan': 800, 'Sapon': 800, 'Lantoro': 900, 'FUNAAB': 1000 },
   packPerItem: 50, service: 150,
@@ -60,7 +61,7 @@ setInterval(() => { const t = now(); for (const [k, v] of hits) if (!v.some(x =>
 const ipOf = req => (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'x';
 
 const publicRestaurant = r => ({
-  id: r.id, name: r.name, area: r.area, tags: JSON.parse(r.tags), time: r.time, rating: r.rating, c1: r.c1, c2: r.c2, open: !!r.open,
+  id: r.id, name: r.name, area: r.area, tags: JSON.parse(r.tags), time: r.time, rating: r.rating, c1: r.c1, c2: r.c2, open: !!r.open, fees: JSON.parse(r.fees || '{}'),
   bank: { bankName: r.bank_name, acctName: r.acct_name, acctNo: r.acct_no },
   menu: db.prepare('SELECT id,name,price,cat,descr AS "desc",avail FROM menu_items WHERE rid=? ORDER BY id').all(r.id).map(m => ({ ...m, id: String(m.id), avail: !!m.avail })),
 });
@@ -129,7 +130,7 @@ route('POST', '/api/orders', ({ body, req }) => {
   if (!name) bad('Enter your name.');
   if (digits(phone).length < 10 || digits(phone).length > 15) bad('Enter a valid phone number.');
   if (mode === 'delivery') { if (!(zone in cfg.zones)) bad('Choose your area.'); if (addr.length < 5) bad('Enter your house address or a landmark.'); }
-  const delivery = mode === 'pickup' ? 0 : cfg.zones[zone], pack = cfg.packPerItem * count, service = cfg.service, total = food + delivery + pack + service;
+  const rf = JSON.parse(r.fees || '{}'), delivery = mode === 'pickup' ? 0 : (Number.isInteger(rf[zone]) ? rf[zone] : cfg.zones[zone]), pack = cfg.packPerItem * count, service = cfg.service, total = food + delivery + pack + service;
   let code = '', tries = 0; const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   do { code = 'GW-' + Array.from({ length: tries > 8 ? 5 : 4 }, () => A[crypto.randomInt(A.length)]).join(''); tries++; } while (db.prepare('SELECT 1 FROM orders WHERE code=?').get(code) && tries < 30);
   let ext = '';
@@ -238,6 +239,16 @@ route('PUT', '/api/admin/restaurants/:id', ({ req, params, body }) => {
   if ('area' in body) db.prepare('UPDATE restaurants SET area=? WHERE id=?').run(str(body.area, 40), r.id);
   if ('tags' in body) db.prepare('UPDATE restaurants SET tags=? WHERE id=?').run(JSON.stringify((Array.isArray(body.tags) ? body.tags : String(body.tags).split(',')).map(t => str(t, 30)).filter(Boolean)), r.id);
   if ('time' in body) db.prepare('UPDATE restaurants SET time=? WHERE id=?').run(str(body.time, 12), r.id);
+  if ('fees' in body) {
+    const cfg = getConfig(), fees = {};
+    for (const [k, v] of Object.entries(body.fees || {})) {
+      if (v === '' || v === null) continue;
+      const n = Number(v);
+      if (!(k in cfg.zones) || !Number.isInteger(n) || n < 0 || n > 100000) bad('Each delivery fee must be a whole number for a known area (' + k + ').');
+      fees[k] = n;
+    }
+    db.prepare('UPDATE restaurants SET fees=? WHERE id=?').run(JSON.stringify(fees), r.id);
+  }
   return { ok: true };
 });
 route('DELETE', '/api/admin/restaurants/:id', ({ req, params }) => { adminAuth(req); db.prepare('DELETE FROM restaurants WHERE id=?').run(params.id); db.prepare('DELETE FROM sessions WHERE rid=?').run(params.id); return { ok: true }; });
@@ -252,7 +263,7 @@ route('PUT', '/api/admin/config', ({ req, body }) => {
 });
 
 /* ---------- server ---------- */
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
 const SEC = {
   'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
   'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'",

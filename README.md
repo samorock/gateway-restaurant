@@ -5,7 +5,7 @@ One small program that is both the website and the backend. It needs **no npm pa
 ## What it does
 - Customers open the website, choose a restaurant, fill a cart, pay by bank transfer and upload the receipt, then place the order. They get an order code and can track it.
 - Restaurants log in at the **Vendor** tab with their own password. They see new orders, open the receipt, accept, mark ready, mark delivered, change the menu and prices, and open or close the restaurant.
-- You (the owner) use **/admin** to add restaurants, reset passwords and set delivery fees.
+- You (the owner) use **/admin** to add restaurants, reset passwords and set delivery fees. The general fee list applies everywhere. Under each restaurant, **Delivery fees** lets you set a different fee for each customer area (an empty box uses the general fee).
 - The server works out all prices itself, so nobody can change a price from their phone.
 
 ## Try it on your own computer

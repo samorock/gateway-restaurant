@@ -13,7 +13,7 @@ input{width:100%;border:1.5px solid var(--line);background:var(--surface);color:
 button{border:0;border-radius:10px;padding:10px 16px;font:inherit;font-weight:700;background:var(--orange);color:#fff;cursor:pointer}
 button.g{background:var(--green);color:#fff}button.x{background:transparent;color:var(--bad);border:1.5px solid var(--line)}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:10px 0}
-.row:last-child{border:0}.muted{color:var(--muted);font-size:14px}.err{color:var(--bad);min-height:1.2em}.ok{color:var(--green);min-height:1.2em}
+.item:last-child .row{border:0}.feebox{background:var(--bg);border-radius:10px;padding:12px;margin:0 0 10px}.muted{color:var(--muted);font-size:14px}.err{color:var(--bad);min-height:1.2em}.ok{color:var(--green);min-height:1.2em}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:560px){.two{grid-template-columns:1fr}}
 </style></head><body><div class="wrap">
 <h1>Gateway admin</h1>
@@ -38,9 +38,9 @@ const $=s=>document.querySelector(s);let key="";
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 async function api(p,method="GET",body){const r=await fetch(p,{method,headers:{"Content-Type":"application/json","x-admin-key":key},body:body?JSON.stringify(body):undefined});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||"Something went wrong.");return j}
 async function refresh(){
-  const list=await api("/api/admin/restaurants");
-  $("#list").innerHTML=list.length?list.map(r=>`<div class="row"><div><b>${esc(r.name)}</b><br><span class="muted">id: ${esc(r.id)} · ${esc(r.area)} · ${r.orders} order(s)</span></div><div><button class="g" data-pw="${esc(r.id)}">New password</button> <button class="x" data-del="${esc(r.id)}">Delete</button></div></div>`).join(""):`<p class="muted">No restaurants yet. Add the first one below.</p>`;
-  const c=await api("/api/admin/config");
+  const list=await api("/api/admin/restaurants"),c=await api("/api/admin/config");
+  const feeBox=r=>`<div class="feebox" id="fe-${esc(r.id)}" hidden><p class="muted" style="margin:0 0 6px">Delivery fee from <b>${esc(r.name)}</b> to each area. Leave a box empty to use the general fee.</p><div class="two">${Object.entries(c.zones).map(([z,g])=>`<div><label>${esc(z)} <span class="muted">(general ₦${g})</span></label><input type="number" min="0" step="50" inputmode="numeric" data-z="${esc(z)}" value="${Number.isInteger(r.fees&&r.fees[z])?r.fees[z]:""}" placeholder="${g}"></div>`).join("")}</div><p class="err" style="margin:6px 0"></p><button class="g" data-savefee="${esc(r.id)}">Save fees for ${esc(r.name)}</button></div>`;
+  $("#list").innerHTML=list.length?list.map(r=>`<div class="item"><div class="row"><div><b>${esc(r.name)}</b><br><span class="muted">id: ${esc(r.id)} · ${esc(r.area)} · ${r.orders} order(s)</span></div><div><button class="g" data-fee="${esc(r.id)}">Delivery fees</button> <button class="g" data-pw="${esc(r.id)}">New password</button> <button class="x" data-del="${esc(r.id)}">Delete</button></div></div>${feeBox(r)}</div>`).join(""):`<p class="muted">No restaurants yet. Add the first one below.</p>`;
   $("#zones").value=Object.entries(c.zones).map(([k,v])=>k+" = "+v).join("\n");$("#pk").value=c.packPerItem;$("#sv").value=c.service;
 }
 $("#enter").onclick=async()=>{key=$("#key").value;try{await api("/api/admin/restaurants");$("#keybox").hidden=true;$("#main").hidden=false;refresh()}catch(e){$("#kerr").textContent=e.message}};
@@ -49,7 +49,9 @@ $("#add").onclick=async()=>{
   try{await api("/api/admin/restaurants","POST",{name:$("#n").value,area:$("#a").value,time:$("#t").value,tags:$("#g").value,bankName:$("#bn").value,acctName:$("#an").value,acctNo:$("#ac").value,password:$("#pw").value});
     ["n","a","t","g","bn","an","ac","pw"].forEach(i=>$("#"+i).value="");refresh()}catch(e){$("#aerr").textContent=e.message}};
 $("#list").onclick=async e=>{
-  const pw=e.target.dataset.pw,del=e.target.dataset.del;
+  const pw=e.target.dataset.pw,del=e.target.dataset.del,fee=e.target.dataset.fee,sf=e.target.dataset.savefee;
+  if(fee){const b=document.getElementById("fe-"+fee);b.hidden=!b.hidden;return}
+  if(sf){const b=document.getElementById("fe-"+sf),fees={};b.querySelectorAll("input[data-z]").forEach(i=>{fees[i.dataset.z]=i.value});const m=b.querySelector(".err");m.textContent="";try{await api("/api/admin/restaurants/"+sf,"PUT",{fees});m.className="ok";m.textContent="Saved.";setTimeout(()=>{m.className="err";m.textContent=""},2000)}catch(er){m.textContent=er.message}return}
   if(pw){const np=Math.random().toString(36).slice(2,10);try{await api("/api/admin/restaurants/"+pw,"PUT",{password:np});e.target.textContent="New password: "+np}catch(er){alert(er.message)}}
   if(del){if(e.target.dataset.sure!=="1"){e.target.dataset.sure="1";e.target.textContent="Tap again to delete";return}try{await api("/api/admin/restaurants/"+del,"DELETE");refresh()}catch(er){alert(er.message)}}
 };
