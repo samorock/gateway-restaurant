@@ -9,7 +9,7 @@ const { DatabaseSync } = require('node:sqlite');
 const PORT = Number(process.env.PORT) || 3000;
 const DATA = process.env.DATA_DIR || path.join(__dirname, 'data');
 const ADMIN_KEY = process.env.ADMIN_KEY || '';
-const PUBLIC = path.join(__dirname, 'public');
+const PUBLIC = __dirname;
 fs.mkdirSync(path.join(DATA, 'receipts'), { recursive: true });
 
 /* ---------- database ---------- */
